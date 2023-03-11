@@ -1,8 +1,8 @@
-# PREDICTING AND IDENTIFYING FACTORS ASSOCIATED WITH UNDERNUTRITION AMONG CHILDREN UNDER FIVE YEARS IN GHANA USING MACHINE LEARNING ALGORITHMS
+# Predicting and identifying factors associated with undernutrition among children under five in Ghana
 
-## ABSTRACT
+## Abstract
 
 
-## R SESSION
+## R session info
 
 
