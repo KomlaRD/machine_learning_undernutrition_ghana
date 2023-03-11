@@ -1,0 +1,1090 @@
+---
+title: Machine learning modelling of nutrition indicators in children under five years
+  in Ghana- R version
+output:
+  html_document: default
+  pdf_document: default
+date: '2022-06-11'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-libraries}
+pacman::p_load(
+        tidyverse, # Data wrangling and visualisation
+        skimr, # Skim dataset
+        rio, # Import dataset
+        here, # Directory management
+        finalfit, # Model parameters and column labelling
+        ggstatsplot, # Statistical plots
+        GGally, # Scatterplot matrix
+        caret, # Machine learning
+        gtsummary, # Summary tables
+        janitor, # Data cleaning
+        parameters, # Model parameters
+        naniar ,# Handling missing values
+        survey, # Complex Survey Design
+        pROC,
+        ROCR,
+        party,
+        randomForest,
+        labelled,
+        tableone
+        
+        
+)
+```
+
+```{r import-dataset}
+df <- import(here("data","GHKR72FL.SAV")) # Import dataset from the data folder
+```
+
+
+
+## Variable selection
+
+- Divide the z-score variables by 100
+
+#### Outcome variables
+
+- WFH z-scores (HW72); 9996: height out of plausible limit, 9997: Age in days out of plausible limit, 9998: Flagged cases
+- HFA z-scores (HW70); 9996: height out of plausible limit, 9997: Age in days out of plausible limit, 9998: Flagged cases
+- WFA z-scores (HW71); 9996: height out of plausible limit, 9997: Age in days out of plausible limit, 9998: Flagged cases
+
+#### Features
+
+- Type of place of residence (V102): 1 for Urban, 2 for Rural
+- child age in months (HW1)
+- Birth order number (B0RD)
+- Gender of the child (B4): 1 for Male, 2 for female
+- Birth weight in kg (M19): 9996: No weight; 9998: Don't know; Divide by 1000
+- Number of children 5 and under in household (V137)
+- Highest education level (v106): 0 for No education, 1 for Primary, 2 for Secondary, 3 for Higher
+- Wealth index (V190): 1 for Poorest, 2 for Poorer, 3 for Middle, 4 for Richer, 5 for Richest
+- Had diarrhea recently (H11): 0 for No, 1 for Yes, last 24 hours, 2 for Yes, last two weeks, 8 for don't know (Join the values for yes into one)
+- Type of toilet facility ();
+- Weight in kg (HW2): 9994 for present, 9995 for Refused, 9996 for other; Divide weight by 10.
+- Region (V024): 1 for Western, 2 for Central, 3 for Greater Accra, 4 for Volta, 5 for Eastern, 5 for Ashanti, 7 for Brong Ahafo, 8 for Nothern, 9 for Upper East, 10 for Upper West
+- Source of drinking water (V113): 10 for Piped water, 20 for Tube well water, 32 for Unprotected well, 43 for River, 71 for Bottled water, 11 for Piped into dwelling, 21 for Tube well or borehole, 40 for Surface Water, 51 for rain water, 72 for Sachet water, 12 for Piped to yard/plot, 30 for Dug well, 41 for Protected spring, 61 for Tanker trunk, 96 for other, 13 for public tap/standpipe, 31 for protected well, 42 for unprotected spring, 62 for cart with small tank, and 97 for not a dejure resident   ; Recode to improved and non-improved sources of water
+
+## we can recode as this: Improved and Unimproved
+The improved water source included all forms of Pipe Water, Borehole, Protected Well/Spring, and Sachet/Bottle water. The unimproved water source included Open River, Dam/stream, and unprotected well/spring.
+
+
+
+```{r column-selection}
+# Use select() function from tidyverse to select columns of interest //TODO: Child's height inclusion, z-score flags
+child <- df%>%
+        select(HW72, #WFH z-scores
+               HW70, # HFA z-scores
+               HW71, # WFA z-scores
+               V102, # Type of place of residence
+               HW1, # Child age in months
+               BORD, # Birth order number
+               B4, # Gender of child
+               M19, # Birth weight of child
+               V137, # Number of children 5 and under
+               V106, # Highest education level
+               V190, # Wealth index
+               H11, # Had diarrhoea recently
+               HW2, # Weight of child
+               V024, # Region
+               V113, # Source of drinking water
+               V005,# Sample Weight
+               V021,# PSU
+               V023,# Strata
+        )
+```
+
+
+
+```{r data-shape}
+dim <- dim(child) # Dimensions of dataset
+```
+
+```{r glimpse-dataset}
+ff_glimpse(child) #Overview of dataset including missing data
+```
+
+
+
+```{r drop-unusual-outcome}
+# Dropped children with unusual nutritional indicators
+child <- child%>%
+        replace_with_na(
+                replace = list(
+                        HW72 = c(9996, 9997, 9998),
+                        HW70 = c(9996, 9997, 9998),
+                        HW71 = c(9996, 9997, 9998)
+                )
+        )
+```
+
+
+```{r glimpse-after-outcome-drop}
+ff_glimpse(child)
+```
+
+
+
+```{r drop-missing}
+child_final <- na.omit(child) # Drop missing observations
+dim_new_df <- dim(child_final) # Assess dimensions of the dataset
+dim_new_df
+```
+
+```{r replace-birthweight-not-weighed-dont-know}
+# Replace unusual birthweight values
+child_final <- child_final%>%
+        replace_with_na(
+                replace = list(M19 = c(9996, 9998)
+                        
+                )
+        )
+```
+
+
+```{r replace-not-de-jeru-with-missing}
+# Replace not de jeru in source of drinking water with missing
+child_final <- child_final%>%
+        replace_with_na(
+                replace = list(V113 = 97
+                        
+                )
+        )
+```
+
+
+```{r drop-missing-after-birthweight-replace}
+child_final <- na.omit(child_final)
+```
+
+
+```{r glimpse-after-bwt-na}
+ff_glimpse(child_final)
+```
+
+## Assessment of data
+
+- There are `r dim[1]` observations in the dataset. The selected columns were `r dim[2]`.
+- Data column names are not descriptive.
+- Weight for height z-scores (HW72) has 3146 missing observations representing 53.5% of observations.
+- Height for age z-scores (HW70) has 3146 missing observations representing 53.5% of observations.
+- Weight for age z-scores (HW71) has 3146 missing observations representing 53.5% of observations.
+- Child's age in month (HW1) has 3102 missing observations representing 52.7% of observations.
+- Birth weight (M19) has 3 missing values representing 0.1% of observations.
+- Had diarrheoa (H11) has 291 missing values representing 4.9% of observations. 
+- Child's weight in kg has 3102 missing observations representing 52.7% of observations.
+- After droping misssing cases, number ended up as `r dim_new_df[1]` 
+
+
+
+```{r skim-dataset}
+# Use skim() from skimr
+# Note assessment of data
+```
+
+
+
+## Cleaning or recoding
+
+- Remove missing values: Completed
+- Change column names into descriptive names: Completed
+- Divide z-score values (HW72, HW70, HW71) by 100: Completed
+- Divide birthweight(M19) values by 1000 to convert into kg.
+- Convert type of residence (V102), sex (B4), Highest educational level (V106), wealh index (V190), Had diarrhoea recently (H11), region (V024), source of drinking water (V113)  into factor type.
+- Remove flaged z-score values.
+- Mutate z-scores values into malnourished defined by z-score < -2 and all others as normal
+- Remove unusual values from (HW72, HW70, HW71: 9996, 9997, 9998), (M19: 9996, 9998).
+
+
+
+- WFH z-scores (HW72)
+- HFA z-scores (HW70)
+- WFA z-scores (HW71)
+- Type of place of residence (V102): 1 for Urban, 2 for Rural
+- child age in months (HW1)
+- Birth order number (B0RD)
+- Gender of the child (B4): 1 for Male, 2 for female
+- Birth weight in kg (M19): 9996: No weight; 9998: Don't know; Divide by 1000
+- Number of children 5 and under in household (V137)
+- Highest education level (v106): 0 for No education, 1 for Primary, 2 for Secondary, 3 for Higher
+- Wealth index (V190): 1 for Poorest, 2 for Poorer, 3 for Middle, 4 for Richer, 5 for Richest
+- Had diarrhea recently (H11): 0 for No, 1 for Yes, last 24 hours, 2 for Yes, last two weeks, 8 for don't know (Join the values for yes into one)
+- Type of toilet facility ();
+- Weight in kg (HW2): 9994 for present, 9995 for Refused, 9996 for other; Divide weight by 10.
+- Region (V024): 1 for Western, 2 for Central, 3 for Greater Accra, 4 for Volta, 5 for Eastern, 5 for Ashanti, 7 for Brong Ahafo, 8 for Nothern, 9 for Upper East, 10 for Upper West
+- Source of drinking water (V113): 10 for Piped water, 20 for Tube well water, 32 for Unprotected well, 43 for River, 71 for Bottled water, 11 for Piped into dwelling, 21 for Tube well or borehole, 40 for Surface Water, 51 for rain water, 72 for Sachet water, 12 for Piped to yard/plot, 30 for Dug well, 41 for Protected spring, 61 for Tanker trunk, 96 for other, 13 for public tap/standpipe, 31 for protected well, 42 for unprotected spring, 62 for cart with small tank, and 97 for not a dejure resident   ; Recode to improved and non-improved sources of water
+ 
+
+```{r rename-columns}
+# Clean and preprocess data using janitor and tidyverse
+# Rename column names using rename()
+child_final <- child_final%>%
+        rename(
+                wfh = HW72,
+                hfa = HW70,
+                wfa = HW71,
+                residence = V102,
+                age = HW1,
+                birth_order = BORD,
+                gender = B4,
+                bwt = M19,
+                num_child = V137,
+                educ_mum = V106,
+                wealth_index = V190,
+                diarrhea = H11,
+                wt = HW2,
+                region = V024,
+                source_water = V113,
+                Sample_wt=V005,
+               PSU=V021,
+               Strata=V023,
+                )
+```
+
+
+```{r division}
+child_final<- child_final%>%
+        mutate(
+                # Divide nutritional indicators by 100
+                wfh = wfh/100,
+                hfa = hfa/100,
+                wfa = wfa/100,
+                # Divide birthweight
+                bwt = bwt/1000,
+                Sample_wt=Sample_wt/1000000
+                )
+```
+
+
+
+```{r recoding}
+# Recode variables
+child_final <- child_final%>%
+        mutate(
+                # Categorical variables
+                residence = factor(residence)%>%
+                        fct_recode("Urban" = "1",
+                                   "Rural" = "2")%>%
+                        ff_label("Type of place of residence"),
+                gender = factor(gender)%>%
+                        fct_recode(
+                                "Male" = "1",
+                                "Female" = "2"
+                        )%>%
+                        ff_label("Gender of child"),
+                educ_mum = factor(educ_mum)%>%
+                        fct_recode(
+                                "No education" = "0",
+                                "Primary" = "1",
+                                "Secondary" = "2",
+                                "Higher" = "3"
+                        )%>%
+                        fct_relevel(
+                                c(
+                                        "No education",
+                                        "Primary",
+                                        "Secondary",
+                                        "Higher"
+                                )
+                        )%>%
+                        ff_label("Mother's educational level"),
+                wealth_index = factor(wealth_index)%>%
+                        fct_recode(
+                                "Poorest" = "1",
+                                "Poorer" = "2",
+                                "Middle" = "3",
+                                "Richer" = "4",
+                                "Richest" = "5"
+                        )%>%
+                        fct_relevel(
+                                c("Poorest",
+                                  "Poorer",
+                                  "Middle",
+                                  "Richer",
+                                  "Richest")
+                        )%>%
+                        ff_label("Household wealth index"),
+                region = factor(region)%>%
+                        fct_recode(
+                                "Western" = "1",
+                                "Central" ="2",
+                                "Greater Accra" = "3",
+                                "Volta" = "4",
+                                "Eastern" = "5",
+                                "Ashanti" = "6",
+                                "Brong-Ahafo" = "7",
+                                "Nothern" = "8",
+                                "Upper East" = "9",
+                                "Upper West" = "10"
+                        )%>%
+                        ff_label("Region of residence"),
+                diarrhea = factor(diarrhea)%>%
+                        fct_recode(
+                                "No" = "0",
+                                "Yes" = "1",
+                                "Yes" = "2",
+                                "Don't know" = "8"
+                        )%>%
+                        ff_label("Child has diarrhoea"),
+                source_water = factor(source_water)%>%
+                        fct_recode(
+                                "Improved" = "10", # Pipe water
+                                "Improved" = "20", # Tube well water
+                                "Improved" = "71", # Bottle water
+                                "Improved" = "11", # Piped into dwelling
+                                "Improved" = "21", # Tube well/borehole
+                                "Improved" = "72", # Sachet water
+                                "Improved" = "12", # Piped into yard or plot
+                                "Improved" = "30", # Dugged well (open/protected)
+                                "Improved" = "31", # Protected well
+                                "Improved" = "41", # Protected spring
+                                "Improved" = "13", # Public tap/stand pipe
+                                "Improved" = "51", # Rainwater
+                                "Unimproved" = "32", # Unprotected well
+                                "Unimproved" = "40", # Surface water
+                                "Unimproved" = "42", # Unprotected spring
+                                "Unimproved" = "43", # River/dam/pond/spring/irrigation/canal
+                                "Unimproved" = "61", # Tanker truck
+                                "Unimproved" = "62", # Cart with small tank
+                                "Other" = "96"
+                         )%>%
+                        ff_label("Source of drinking water"),
+                wfh_cat = ifelse(
+                        wfh < -2, "Wasting",
+                        "Normal"
+                )%>%
+                        ff_label("Wasting"),
+                hfa_cat = ifelse(
+                        hfa < -2, "Stunting",
+                        "Normal"
+                )%>%
+                        ff_label("Stunting"),
+                wfa_cat = ifelse(
+                        wfa < -2, "Underweight",
+                        "Normal"
+                )%>%
+                        ff_label("Underweight")
+        )
+```
+
+
+```{r dummy-variables}
+child_final<- child_final%>%
+        mutate(
+                wfh_dummy = wfh_cat%>%
+                        fct_recode(
+                        
+                                "1" = "Wasting",
+                                 "0" = "Normal"
+                        ),
+                
+                hfa_dummy = hfa_cat%>%
+                        fct_recode(
+                                "0" = "Normal",
+                                "1" = "Stunting"
+                        ),
+                
+                wfa_dummy = wfa_cat%>%
+                        fct_recode(
+                                "0" = "Normal",
+                                "1" = "Underweight"
+                        )
+        )
+```
+
+
+```{r assigning variable label with dplyr }
+# 
+var_label(child_final)=list(
+      wfh_dummy="Wasting",
+      hfa_dummy="Stunting",
+      wfa_dummy="Underweight",
+      wfh_cat="Wasting",
+      hfa_cat="Stunting",
+      wfa_cat="Underweight",
+      residence="Place of Residence",
+      age="Age of child",
+      birth_order="Birth Order of child",
+      gender="Gender of Child",
+      bwt ="Birth Weight",
+      num_child="Number of children Underfive",
+      educ_mum="Mothers level of Education",
+      wealth_index="Household wealth Index",
+      diarrhea="Child has diarroea",
+      wt="Current weight of child",
+      region="Region of Residence",
+      source_water="Source of Water",
+      Sample_wt="Sample Weight",
+               PSU="Primary Sampling Unit",
+               Strata="Strata"
+                )
+```
+
+
+```{r glimpse-final-dataset}
+ff_glimpse(child_final)
+```
+
+<<<<<<< HEAD
+```{r}
+# list types for each attribute
+sapply(child_final,class)
+```
+
+```{r}
+# take a peek at the first 5 rows of the data
+head(child_final)
+
+
+# summarize the class distribution for wfh
+percentage<- prop.table(table(child_final$wfh_dummy)) * 100  
+cbind(freq=table(child_final$wfh_dummy), percentage_wfh=percentage)
+#summarize the class distribution for hfa
+percentage<- prop.table(table(child_final$hfa_dummy)) * 100  
+cbind(freq=table(child_final$hfa_dummy), percentage_hfa=percentage)
+#summarize the class distribution for wfa
+percentage<- prop.table(table(child_final$wfa_dummy)) * 100  
+cbind(freq=table(child_final$hfa_dummy), percentage_wfa=percentage)
+
+```
+||||||| e7cbe50
+=======
+```{r export-clean-dataset}
+export(child_final, here("data","clean_data.csv")) #Export clean dataset
+```
+
+>>>>>>> 12d47bf4eb370bb5076e99fa8d800ccca6cd8049
+
+## Exploratory data analysis
+
+```{r,#creating survey object "des" from PSU,strata,sampleweight}
+des<-svydesign(ids=~PSU, strata=~Strata, weights=~Sample_wt, data = child_final[is.na(child_final$Sample_wt)==F,], nest=T)
+summary(des)
+```
+
+```{r,#estimating the proportion of each nutritional outcome}
+svymean(~wfh_dummy,des)
+svymean(~hfa_dummy,des)
+svymean(~wfa_dummy,des)
+```
+
+```{r,# estimating the regional burden of nutritional outcomes,
+each region=100%}
+reg.est.wfh<-svyby(~wfh_dummy,~region,FUN = svymean, na.rm=T, design =des)
+reg.est.hfa<-svyby(~hfa_dummy,~region,FUN = svymean, na.rm=T, design =des)
+reg.est.wfa<-svyby(~wfa_dummy,~region,FUN = svymean, na.rm=T, design =des)
+reg.est.wfh
+reg.est.hfa
+reg.est.wfa
+```
+
+```{r,#estimates of factors by wfh}
+prop.table(cat<-svytable(~residence+wfh_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~region+wfh_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~birth_order+wfh_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~gender+wfh_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~educ_mum+wfh_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~wealth_index+wfh_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~diarrhea+wfh_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~source_water+wfh_cat,design=des),margin = 2)*100
+
+```
+
+
+```{r,#estimates of factors by hfa}
+prop.table(cat<-svytable(~residence+hfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~region+hfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~birth_order+hfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~gender+hfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~educ_mum+hfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~wealth_index+hfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~diarrhea+hfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~source_water+hfa_cat,design=des),margin = 2)*100
+
+```
+
+```{r,#estimates of factors by wfa}
+prop.table(cat<-svytable(~residence+wfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~region+wfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~birth_order+wfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~gender+wfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~educ_mum+wfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~wealth_index+wfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~diarrhea+wfa_cat,design=des),margin = 2)*100
+prop.table(cat<-svytable(~source_water+wfa_cat,design=des),margin = 2)*100
+
+```
+
+```{r}
+# creating tab1 with "tableone" and the survey design object "des" previously created from the survey package 
+# creating tab1 with "tableone" and the survey design object "des" previously created from the survey package 
+tab1 <- svyCreateTableOne(vars = c("residence","age"," birth_order", "gender","bwt", "num_child","educ_mum", "wealth_index","diarrhea","wt","region","source_water"),
+                          strata = "wfh_dummy", data = des, addOverall = TRUE)
+print(tab1,showAllLevels = TRUE)
+tab1P<-print(tab1,showAllLevels = TRUE)
+write.csv(tab1P, file = "tab1.csv")
+
+
+tab2 <- svyCreateTableOne(vars = c("residence","age"," birth_order", "gender","bwt", "num_child","educ_mum", "wealth_index","diarrhea","wt","region","source_water"),
+                          strata = "hfa_dummy", data = des, addOverall = TRUE)
+print(tab2,showAllLevels = TRUE)                         
+tab2P<-print(tab2,showAllLevels = TRUE)
+write.csv(tab2P, file = "tab2.csv")
+
+
+tab3 <- svyCreateTableOne(vars = c("residence","age"," birth_order", "gender","bwt", "num_child","educ_mum", "wealth_index","diarrhea","wt","region","source_water"),
+                          strata = "wfa_dummy", data = des, addOverall = TRUE)
+print(tab3,showAllLevels = TRUE)
+tab3P<-print(tab3,showAllLevels = TRUE)
+write.csv(tab3P, file = "tab3.csv")
+
+tab1a<-des%>% 
+tbl_svysummary(include=c(residence,age,birth_order, gender,bwt, num_child,educ_mum,wealth_index,diarrhea,wt,region,source_water,wfh_dummy,hfa_dummy,wfa_dummy),statistic = list(all_continuous() ~ "{mean} ({sd})")
+)
+
+tab1a
+
+tab2wfh<-des%>% 
+tbl_svysummary(by=wfh_dummy, include=c(wfh_dummy,residence,age,birth_order, gender,bwt, num_child,educ_mum,wealth_index,diarrhea,wt,region,source_water),statistic = list(all_continuous() ~ "{mean} ({sd})")
+)%>% 
+add_p()
+tab2wfh
+
+tab3hfa<-des%>% 
+tbl_svysummary(by=hfa_dummy, include=c(hfa_dummy,residence,age,birth_order, gender,bwt, num_child,educ_mum,wealth_index,diarrhea,wt,region,source_water),statistic = list(all_continuous() ~ "{mean} ({sd})")
+)%>% 
+add_p()
+tab3hfa
+
+tab4wfa<-des%>% 
+tbl_svysummary(by=wfa_dummy, include=c(wfa_dummy,residence,age,birth_order, gender,bwt, num_child,educ_mum,wealth_index,diarrhea,wt,region,source_water),statistic = list(all_continuous() ~ "{mean} ({sd})")
+)%>% 
+add_p()
+tab4wfa
+```
+
+```{r  creating training and testing data set for the three outcomes }
+set.seed(7)
+
+intrain.wfh_dummy<-createDataPartition(y=child_final$wfh_dummy, p=.60, list=F)
+train.wfh_dummy <- child_final[intrain.wfh_dummy,]
+test.wfh_dummy<- child_final[-intrain.wfh_dummy,]
+
+set.seed(7)
+intrain.hfa_dummy<-createDataPartition(y=child_final$hfa_dummy, p=.70, list=F)
+train.hfa_dummy <- child_final[intrain.hfa_dummy,]
+test.hfa_dummy<- child_final[-intrain.hfa_dummy,]
+
+set.seed(7)
+intrain.wfa_dummy<-createDataPartition(y=child_final$wfa_dummy, p=.70, list=F)
+train.wfa_dummy<- child_final[intrain.wfa_dummy,]
+test.wfa_dummy<- child_final[-intrain.wfa_dummy,]
+
+```
+
+```{r run algorithims using 5 fold cross validation}
+control<-trainControl(method="cv",number=5)
+metric<-"Accuracy"
+```
+
+```{r}
+#Create a vector for potential lambda values for both the ridge and lasso models
+lambda_vector<-seq(0,1,by=0.01)
+```
+
+
+
+
+
+```{r}
+set.seed(7)
+# a) Linear Discriminant Analaysis
+fit.lda_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index  +diarrhea +wt+region +source_water, data=train.wfh_dummy, method="lda", metric=metric, trControl=control,weight=train.wfh_dummy$Sample_wt,tuneLength=15)
+
+# Support vector machine
+set.seed(7)
+fit.svm_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index  +diarrhea +wt+region +source_water, data=train.wfh_dummy, method="svmRadial", metric=metric, trControl=control,weight=train.wfh_dummy$Sample_wt,tuneLength=15)
+
+# Logistic Model
+set.seed(7)
+fit.logistic_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfh_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfh_dummy$Sample_wt,family="binomial")
+
+# Random forest Model
+set.seed(7)
+fit.rf_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfh_dummy, method="rf", metric=metric, trControl=control,weights=train.wfh_dummy$Sample_wt,tuneLength=15)
+
+# LASSO Model
+set.seed(7)
+fit.lasso_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfh_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfh_dummy$Sample_wt,tuneGrid=expand.grid(alpha=1,lambda=lambda_vector))
+
+# Get the optimal tunning parameter for the lasso
+bestlambda_Lasso<-fit.lasso_wfh$bestTune$lambda
+bestlambda_Lasso
+
+# final Lasso with optimal lambda
+set.seed(7)
+fit.lasso_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfh_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfh_dummy$Sample_wt,tuneGrid=expand.grid(alpha=1,lambda=bestlambda_Lasso))
+
+# Ridge Regression
+set.seed(7)
+fit.ridge_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfh_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfh_dummy$Sample_wt,tuneGrid=expand.grid(alpha=0,lambda=lambda_vector))
+
+# Get the optimal tunning parameter for the ridge 
+bestlambda_ridge<-fit.ridge_wfh$bestTune$lambda
+bestlambda_ridge
+
+# final ridge with best lambda
+set.seed(7)
+fit.ridge_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfh_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfh_dummy$Sample_wt,tuneGrid=expand.grid(alpha=0,lambda=bestlambda_ridge))
+```
+
+```{r}
+# summarize accuracy of models
+results <- resamples(list("Linear Discriminant Analysis" =fit.lda_wfh,"Logistic Model"=fit.logistic_wfh, "Support Vector Machine " =fit.svm_wfh,"Random Forest" =fit.rf_wfh,LASSO=fit.lasso_wfh,Ridge=fit.ridge_wfh))
+summary(results)
+dotplot(results)
+
+
+```
+
+```{r}
+# summarize Best Model
+print(fit.rf_wfh)
+```
+```
+
+```{r}
+# estimate skill of all models  on the validation dataset
+predictions <- predict(fit.lda_wfh, test.wfh_dummy)
+confusionMatrix(predictions, test.wfh_dummy$wfh_dummy,positive="1")
+
+predictions <- predict(fit.logistic_wfh, test.wfh_dummy)
+confusionMatrix(predictions, test.wfh_dummy$wfh_dummy,positive="1")
+
+predictions <- predict(fit.svm_wfh, test.wfh_dummy)
+confusionMatrix(predictions, test.wfh_dummy$wfh_dummy,positive="1")
+
+predictions <- predict(fit.rf_wfh, test.wfh_dummy)
+confusionMatrix(predictions, test.wfh_dummy$wfh_dummy,positive="1")
+
+predictions <- predict(fit.lasso_wfh, test.wfh_dummy)
+confusionMatrix(predictions, test.wfh_dummy$wfh_dummy,positive="1")
+
+predictions <- predict(fit.ridge_wfh, test.wfh_dummy)
+confusionMatrix(predictions, test.wfh_dummy$wfh_dummy,positive="1")
+
+```
+
+
+
+```{r getting variable importance}
+varImp(fit.lda_wfh)
+varImp(fit.logistic_wfh)
+varImp(fit.svm_wfh)
+varImp(fit.rf_wfh)
+varImp(fit.lasso_wfh)
+varImp(fit.ridge_wfh)
+
+```
+
+```{r fitting variable importance} 
+varImp(fit.lda_wfh,scale=FALSE)
+varImp(fit.logistic_wfh,scale=FALSE)
+varImp(fit.svm_wfh,scale=FALSE)
+varImp(fit.rf_wfh,scale=FALSE)
+varImp(fit.lasso_wfh,scale=FALSE)
+varImp(fit.ridge_wfh,scale=FALSE)
+```
+
+```{r ploting variable importance}
+plot(varImp(fit.lda_wfh))
+plot(varImp(fit.logistic_wfh))
+plot(varImp(fit.svm_wfh))
+plot(varImp(fit.rf_wfh))
+plot(varImp(fit.lasso_wfh))
+plot(varImp(fit.ridge_wfh))
+```
+
+```{r}
+#test.wfh_dummy$pred <- predict(fit.lda_wfh, test.wfh_dummy,probability=TRUE)
+#roc_curve = roc(test.wfh_dummy$wfh_dummy, predictor=factor(test.wfh_dummy$pred,ordered = TRUE))
+#plot(roc_curve, col="red", lwd=3)
+```
+
+```{r producing individual ROC curves for all the models}
+test_prob_lda = predict(fit.lda_wfh, newdata = test.wfh_dummy, probability=TRUE)
+test_roc_lda = roc(test.wfh_dummy$wfh_dummy ~ factor(test_prob_lda,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_logistic = predict(fit.logistic_wfh, newdata = test.wfh_dummy, probability=TRUE)
+test_roc_logistic = roc(test.wfh_dummy$wfh_dummy ~ factor(test_prob_logistic,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_svm= predict(fit.svm_wfh, newdata = test.wfh_dummy, probability=TRUE)
+test_roc_svm = roc(test.wfh_dummy$wfh_dummy ~ factor(test_prob_svm,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_rf= predict(fit.rf_wfh, newdata = test.wfh_dummy, probability=TRUE)
+test_roc_rf = roc(test.wfh_dummy$wfh_dummy ~ factor(test_prob_rf,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_lasso= predict(fit.lasso_wfh, newdata = test.wfh_dummy, probability=TRUE)
+test_roc_lasso = roc(test.wfh_dummy$wfh_dummy ~ factor(test_prob_lasso,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_ridge= predict(fit.ridge_wfh, newdata = test.wfh_dummy, probability=TRUE)
+test_roc_ridge= roc(test.wfh_dummy$wfh_dummy ~ factor(test_prob_ridge,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r combining all the ROC into one}
+plot(test_roc_lda,    print.auc = TRUE,  col='blue',percent=TRUE, print.auc.y = 34, print.auc.x = 0)
+plot(test_roc_logistic, add = TRUE, col='darkgoldenrod4', print.auc = TRUE, print.auc.y = 27, print.auc.x = 0)
+plot(test_roc_svm , add = TRUE, col='red', print.auc = TRUE, print.auc.y = 20, print.auc.x = 0)
+plot(test_roc_rf , add = TRUE, col='chartreuse', print.auc = TRUE, print.auc.y = 15, print.auc.x = 0)
+plot(test_roc_lasso , add = TRUE, col='#999999', print.auc = TRUE, print.auc.y = 10, print.auc.x = 0)
+plot(test_roc_ridge , add = TRUE, col='#330033', print.auc = TRUE, print.auc.y = 5, print.auc.x = 0)
+abline(a=0, b=1, lty=2, lwd=3, col="black")
+legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","999999","330033"))
+```
+
+```{r modelling for hfa}
+set.seed(7)
+# a) Linear Discriminant Analaysis
+fit.lda_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index  +diarrhea +wt+region +source_water, data=train.hfa_dummy, method="lda", metric=metric, trControl=control,weight=train.hfa_dummy$Sample_wt,tuneLength=15)
+
+# Support vector machine
+set.seed(7)
+fit.svm_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index  +diarrhea +wt+region +source_water, data=train.hfa_dummy, method="svmRadial", metric=metric, trControl=control,weight=train.hfa_dummy$Sample_wt,tuneLength=15)
+
+# Logistic Model
+set.seed(7)
+fit.logistic_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.hfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.hfa_dummy$Sample_wt,family="binomial")
+
+# Random forest Model
+set.seed(7)
+fit.rf_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.hfa_dummy, method="rf", metric=metric, trControl=control,weights=train.hfa_dummy$Sample_wt,tuneLength=15)
+
+# LASSO Model with vector lambda
+set.seed(7)
+fit.lasso_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.hfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.hfa_dummy$Sample_wt,tuneGrid=expand.grid(alpha=1,lambda=lambda_vector))
+
+# Get the optimal tunning parameter for the lasso
+bestlambda_Lasso<-fit.lasso_hfa$bestTune$lambda
+bestlambda_Lasso
+
+# refit the lasso model with the best lambda value
+set.seed(7)
+fit.lasso_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.hfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.hfa_dummy$Sample_wt,tuneGrid=expand.grid(alpha=1,lambda=bestlambda_Lasso))
+
+
+
+# Ridge Regression
+set.seed(7)
+fit.ridge_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.hfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.hfa_dummy$Sample_wt,tuneGrid=expand.grid(alpha=0,lambda=lambda_vector))
+
+# Get the optimal tunning parameter for the ridge 
+bestlambda_ridge<-fit.ridge_hfa$bestTune$lambda
+bestlambda_ridge
+
+# fit the final ridge model with best lambda values 
+set.seed(7)
+fit.ridge_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.hfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.hfa_dummy$Sample_wt,tuneGrid=expand.grid(alpha=0,lambda=bestlambda_ridge))
+
+```
+
+```{r summarize accuracy of hfa models}
+results <- results <- resamples(list("Linear Discriminant Analysis" =fit.lda_hfa,"Logistic Model"=fit.logistic_hfa, "Support Vector Machine " =fit.svm_hfa,"Random Forest" =fit.rf_hfa,LASSO=fit.lasso_hfa,Ridge=fit.ridge_hfa))
+summary(results)
+dotplot(results)
+
+```
+
+```{r}
+# summarize Best Model
+print(fit.rf_hfa)
+```
+
+```{r}
+# estimate skill of all hfa models  on the validation dataset 
+predictions <- predict(fit.lda_hfa, test.hfa_dummy)
+confusionMatrix(predictions, test.hfa_dummy$hfa_dummy,positive="1")
+
+predictions <- predict(fit.logistic_hfa, test.hfa_dummy)
+confusionMatrix(predictions, test.hfa_dummy$hfa_dummy,positive="1")
+
+predictions <- predict(fit.svm_hfa, test.hfa_dummy)
+confusionMatrix(predictions, test.hfa_dummy$hfa_dummy,positive="1")
+
+predictions <- predict(fit.rf_hfa, test.hfa_dummy)
+confusionMatrix(predictions, test.hfa_dummy$hfa_dummy,positive="1")
+
+predictions <- predict(fit.lasso_hfa, test.hfa_dummy)
+confusionMatrix(predictions, test.hfa_dummy$hfa_dummy,positive="1")
+
+predictions <- predict(fit.ridge_hfa, test.hfa_dummy)
+confusionMatrix(predictions, test.hfa_dummy$hfa_dummy,positive="1")
+
+```
+
+```{r getting variable importance of hfa models}
+varImp(fit.lda_hfa)
+varImp(fit.logistic_hfa)
+varImp(fit.svm_hfa)
+varImp(fit.rf_hfa)
+varImp(fit.lasso_hfa)
+varImp(fit.ridge_hfa)
+
+```
+
+```{r fitting variable importance hfa}
+
+varImp(fit.lda_hfa,scale=FALSE)
+varImp(fit.logistic_hfa,scale=FALSE)
+varImp(fit.svm_hfa,scale=FALSE)
+varImp(fit.rf_hfa,scale=FALSE)
+varImp(fit.lasso_hfa,scale=FALSE)
+varImp(fit.ridge_hfa,scale=FALSE)
+```
+
+```{r ploting variable importance hfa}
+plot(varImp(fit.lda_hfa))
+plot(varImp(fit.logistic_hfa))
+plot(varImp(fit.svm_hfa))
+plot(varImp(fit.rf_hfa))
+plot(varImp(fit.lasso_hfa))
+plot(varImp(fit.ridge_hfa))
+```
+
+```{r producing individual ROC curves for all the hfa models}
+test_prob_lda= predict(fit.lda_hfa, newdata = test.hfa_dummy, probability=TRUE)
+test_roc_lda = roc(test.hfa_dummy$hfa_dummy ~ factor(test_prob_lda,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_logistic = predict(fit.logistic_hfa, newdata = test.hfa_dummy, probability=TRUE)
+test_roc_logistic = roc(test.hfa_dummy$hfa_dummy ~ factor(test_prob_logistic,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_svm= predict(fit.svm_hfa, newdata = test.hfa_dummy, probability=TRUE)
+test_roc_svm = roc(test.hfa_dummy$hfa_dummy ~ factor(test_prob_svm,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_rf= predict(fit.rf_hfa, newdata = test.hfa_dummy, probability=TRUE)
+test_roc_rf = roc(test.hfa_dummy$hfa_dummy ~ factor(test_prob_rf,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_lasso= predict(fit.lasso_hfa, newdata = test.hfa_dummy, probability=TRUE)
+test_roc_lasso = roc(test.hfa_dummy$hfa_dummy ~ factor(test_prob_lasso,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_ridge= predict(fit.ridge_hfa, newdata = test.hfa_dummy, probability=TRUE)
+test_roc_ridge= roc(test.hfa_dummy$hfa_dummy ~ factor(test_prob_ridge,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+```
+
+
+```{r combining all the hfa ROC into one}
+plot(test_roc_lda,    print.auc = TRUE,  col='blue',percent=TRUE, print.auc.y = 34, print.auc.x = 0)
+plot(test_roc_logistic, add = TRUE, col='darkgoldenrod4', print.auc = TRUE, print.auc.y = 27, print.auc.x = 0)
+plot(test_roc_svm , add = TRUE, col='red', print.auc = TRUE, print.auc.y = 20, print.auc.x = 0)
+plot(test_roc_rf , add = TRUE, col='chartreuse', print.auc = TRUE, print.auc.y = 15, print.auc.x = 0)
+plot(test_roc_lasso , add = TRUE, col='#999999', print.auc = TRUE, print.auc.y = 10, print.auc.x = 0)
+plot(test_roc_ridge , add = TRUE, col='#330033', print.auc = TRUE, print.auc.y = 5, print.auc.x = 0)
+abline(a=0, b=1, lty=2, lwd=3, col="black")
+legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","999999","330033"))
+```
+
+```{r model wfa on training data}
+set.seed(7)
+# a) Linear Discriminant Analaysis
+fit.lda_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfa_dummy, method="lda", metric=metric, trControl=control,weight=train.wfa_dummy$Sample_wt,tuneLength=15)
+
+# Support vector machine
+set.seed(7)
+fit.svm_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index  +diarrhea +wt+region +source_water, data=train.wfa_dummy, method="svmRadial", metric=metric, trControl=control,weight=train.wfa_dummy$Sample_wt,tuneLength=15)
+
+# Logistic Model
+set.seed(7)
+fit.logistic_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfa_dummy$Sample_wt,family="binomial")
+
+# Random forest Model
+set.seed(7)
+fit.rf_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfa_dummy, method="rf", metric=metric, trControl=control,weights=train.wfa_dummy$Sample_wt,tuneLength=15)
+
+# LASSO Model
+set.seed(7)
+fit.lasso_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfa_dummy$Sample_wt,tuneGrid=expand.grid(alpha=1,lambda=lambda_vector))
+
+# Get the optimal tuning parameter for the lasso
+bestlambda_Lasso<-fit.lasso_wfa$bestTune$lambda
+bestlambda_Lasso
+
+# refit the lasso model with the best lambda
+set.seed(7)
+fit.lasso_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfa_dummy$Sample_wt,tuneGrid=expand.grid(alpha=1,lambda=bestlambda_Lasso))
+
+
+
+# initial Ridge Regression with vector lambda
+set.seed(7)
+fit.ridge_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfa_dummy$Sample_wt,tuneGrid=expand.grid(alpha=0,lambda=lambda_vector))
+
+# Get the optimal tunning parameter for the ridge 
+bestlambda_ridge<-fit.ridge_wfa$bestTune$lambda
+bestlambda_ridge
+
+# refit the ridge model with the best tuning parameters 
+set.seed(7)
+fit.ridge_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfa_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfa_dummy$Sample_wt,tuneGrid=expand.grid(alpha=0,lambda=bestlambda_ridge))
+
+
+```
+
+```{r}
+# summarize accuracy of wfa models
+results <- resamples(list("Linear Discriminant Analysis" =fit.lda_wfa,"Logistic Model"=fit.logistic_wfa, "Support Vector Machine " =fit.svm_wfa,"Random Forest" =fit.rf_wfa,LASSO=fit.lasso_wfa,Ridge=fit.ridge_wfa))
+summary(results)
+dotplot(results)
+
+```
+
+```{r}
+# summarize Best wfa Model
+print(fit.rf_wfa)
+```
+```
+
+```{r}
+# estimate skill of all wfa models  on the validation dataset
+predictions <- predict(fit.lda_wfa, test.wfa_dummy)
+confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
+
+predictions <- predict(fit.logistic_wfa, test.wfa_dummy)
+confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
+
+predictions <- predict(fit.svm_wfa, test.wfa_dummy)
+confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
+
+predictions <- predict(fit.rf_wfa, test.wfa_dummy)
+confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
+
+predictions <- predict(fit.lasso_wfa, test.wfa_dummy)
+confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
+
+predictions <- predict(fit.ridge_wfa, test.wfa_dummy)
+confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
+
+```
+
+
+```{r getting variable importance of wfa models}
+varImp(fit.lda_wfa)
+varImp(fit.logistic_wfa)
+varImp(fit.svm_wfa)
+varImp(fit.rf_wfa)
+varImp(fit.lasso_wfa)
+varImp(fit.ridge_wfa)
+
+```
+
+```{r fitting variable importance of wfa models} 
+varImp(fit.lda_wfa,scale=FALSE)
+varImp(fit.logistic_wfa,scale=FALSE)
+varImp(fit.svm_wfa,scale=FALSE)
+varImp(fit.rf_wfa,scale=FALSE)
+varImp(fit.lasso_wfa,scale=FALSE)
+varImp(fit.ridge_wfa,scale=FALSE)
+```
+
+```{r ploting variable importance of wfa models}
+plot(varImp(fit.lda_wfa))
+plot(varImp(fit.logistic_wfa))
+plot(varImp(fit.svm_wfa))
+plot(varImp(fit.rf_wfa))
+plot(varImp(fit.lasso_wfa))
+plot(varImp(fit.ridge_wfa))
+```
+
+```{r}
+#test. wfa_dummy$pred <- predict(fit.lda_ wfa, test. wfa_dummy,probability=TRUE)
+#roc_curve = roc(test. wfa_dummy$ wfa_dummy, predictor=factor(test. wfa_dummy$pred,ordered = TRUE))
+#plot(roc_curve, col="red", lwd=3)
+```
+
+```{r producing individual ROC curves for all the wfa models}
+test_prob_lda = predict(fit.lda_wfa, newdata = test.wfa_dummy, probability=TRUE)
+test_roc_lda = roc(test.wfa_dummy$ wfa_dummy ~ factor(test_prob_lda,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_logistic = predict(fit.logistic_wfa, newdata = test.wfa_dummy, probability=TRUE)
+test_roc_logistic = roc(test.wfa_dummy$ wfa_dummy ~ factor(test_prob_logistic,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_svm= predict(fit.svm_wfa, newdata = test.wfa_dummy, probability=TRUE)
+test_roc_svm = roc(test.wfa_dummy$ wfa_dummy ~ factor(test_prob_svm,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_rf= predict(fit.rf_wfa, newdata = test.wfa_dummy, probability=TRUE)
+test_roc_rf = roc(test.wfa_dummy$ wfa_dummy ~ factor(test_prob_rf,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_lasso= predict(fit.lasso_wfa, newdata = test.wfa_dummy, probability=TRUE)
+test_roc_lasso = roc(test.wfa_dummy$ wfa_dummy ~ factor(test_prob_lasso,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+
+test_prob_ridge= predict(fit.ridge_wfa, newdata = test.wfa_dummy, probability=TRUE)
+test_roc_ridge= roc(test.wfa_dummy$wfa_dummy ~ factor(test_prob_ridge,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
+```
+
+
+
+
+```{r combining all the wfa ROC into one}
+plot(test_roc_lda,    print.auc = TRUE,  col='blue',percent=TRUE, print.auc.y = 34, print.auc.x = 0)
+plot(test_roc_logistic, add = TRUE, col='darkgoldenrod4', print.auc = TRUE, print.auc.y = 27, print.auc.x = 0)
+plot(test_roc_svm , add = TRUE, col='red', print.auc = TRUE, print.auc.y = 20, print.auc.x = 0)
+plot(test_roc_rf , add = TRUE, col='chartreuse', print.auc = TRUE, print.auc.y = 15, print.auc.x = 0)
+plot(test_roc_lasso , add = TRUE, col='#999999', print.auc = TRUE, print.auc.y = 10, print.auc.x = 0)
+plot(test_roc_ridge , add = TRUE, col='#330033', print.auc = TRUE, print.auc.y = 5, print.auc.x = 0)
+abline(a=0, b=1, lty=2, lwd=3, col="black")
+legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","999999","330033"))
+```
+
+
+```
+
+
+
+
+```{r statistical-visualisation}
+# Stats visualisations using ggstatsplot
+# Note observations under exploratory section
+```
+
+
+```{r scatterplot-matrix}
+# Create a scatterplot matrix using ggpairs from GGally
+# Note observations under exploratory section
+```
+
+## Introduction to actual analysis
+
+Provide detailed information about the dataset
+
+### Machine learning workflow
+
+1.  Access and load the data: Completed
+2.  Preprocess the data
+3.  Derive features using the preprocessed data
+4.  Train models using the features derived in step 3
+5.  Iterate to find the best model
+6.  Integrate the best-trained model into a production system
+
+## Explanatory data analysis
+
+
+
+## Baseline model
+
+
+## Iterate
+
+
+## Evaluate model
