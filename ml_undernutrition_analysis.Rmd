@@ -5,6 +5,7 @@ output:
   html_document: default
   pdf_document: default
 date: '2022-06-11'
+author: "Eric Komla Anku and Henry Ofori-Duah"
 ---
 
 ```{r setup, include=FALSE}
@@ -397,7 +398,7 @@ child_final<- child_final%>%
 ```
 
 
-```{r assigning variable label with dplyr }
+```{r assigning-variable-label-with-dplyr}
 # 
 var_label(child_final)=list(
       wfh_dummy="Wasting",
@@ -461,7 +462,7 @@ export(child_final, here("data","clean_data.csv")) #Export clean dataset
 
 ## Exploratory data analysis
 
-```{r,#creating survey object "des" from PSU,strata,sampleweight}
+```{r, #creating survey object "des" from PSU,strata,sampleweight}
 des<-svydesign(ids=~PSU, strata=~Strata, weights=~Sample_wt, data = child_final[is.na(child_final$Sample_wt)==F,], nest=T)
 summary(des)
 ```
@@ -472,8 +473,7 @@ svymean(~hfa_dummy,des)
 svymean(~wfa_dummy,des)
 ```
 
-```{r,# estimating the regional burden of nutritional outcomes,
-each region=100%}
+```{r, #estimating-the-regional-burden-of-nutritional-outcomes}
 reg.est.wfh<-svyby(~wfh_dummy,~region,FUN = svymean, na.rm=T, design =des)
 reg.est.hfa<-svyby(~hfa_dummy,~region,FUN = svymean, na.rm=T, design =des)
 reg.est.wfa<-svyby(~wfa_dummy,~region,FUN = svymean, na.rm=T, design =des)
@@ -491,7 +491,6 @@ prop.table(cat<-svytable(~educ_mum+wfh_cat,design=des),margin = 2)*100
 prop.table(cat<-svytable(~wealth_index+wfh_cat,design=des),margin = 2)*100
 prop.table(cat<-svytable(~diarrhea+wfh_cat,design=des),margin = 2)*100
 prop.table(cat<-svytable(~source_water+wfh_cat,design=des),margin = 2)*100
-
 ```
 
 
@@ -504,7 +503,6 @@ prop.table(cat<-svytable(~educ_mum+hfa_cat,design=des),margin = 2)*100
 prop.table(cat<-svytable(~wealth_index+hfa_cat,design=des),margin = 2)*100
 prop.table(cat<-svytable(~diarrhea+hfa_cat,design=des),margin = 2)*100
 prop.table(cat<-svytable(~source_water+hfa_cat,design=des),margin = 2)*100
-
 ```
 
 ```{r,#estimates of factors by wfa}
@@ -516,7 +514,6 @@ prop.table(cat<-svytable(~educ_mum+wfa_cat,design=des),margin = 2)*100
 prop.table(cat<-svytable(~wealth_index+wfa_cat,design=des),margin = 2)*100
 prop.table(cat<-svytable(~diarrhea+wfa_cat,design=des),margin = 2)*100
 prop.table(cat<-svytable(~source_water+wfa_cat,design=des),margin = 2)*100
-
 ```
 
 ```{r}
@@ -583,13 +580,13 @@ set.seed(7)
 intrain.wfa_dummy<-createDataPartition(y=child_final$wfa_dummy, p=.70, list=F)
 train.wfa_dummy<- child_final[intrain.wfa_dummy,]
 test.wfa_dummy<- child_final[-intrain.wfa_dummy,]
-
 ```
 
 ```{r run algorithims using 5 fold cross validation}
 control<-trainControl(method="cv",number=5)
 metric<-"Accuracy"
 ```
+
 
 ```{r}
 #Create a vector for potential lambda values for both the ridge and lasso models
@@ -647,14 +644,11 @@ fit.ridge_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  
 results <- resamples(list("Linear Discriminant Analysis" =fit.lda_wfh,"Logistic Model"=fit.logistic_wfh, "Support Vector Machine " =fit.svm_wfh,"Random Forest" =fit.rf_wfh,LASSO=fit.lasso_wfh,Ridge=fit.ridge_wfh))
 summary(results)
 dotplot(results)
-
-
 ```
 
 ```{r}
 # summarize Best Model
 print(fit.rf_wfh)
-```
 ```
 
 ```{r}
@@ -688,7 +682,6 @@ varImp(fit.svm_wfh)
 varImp(fit.rf_wfh)
 varImp(fit.lasso_wfh)
 varImp(fit.ridge_wfh)
-
 ```
 
 ```{r fitting variable importance} 
@@ -805,7 +798,6 @@ fit.ridge_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  
 results <- results <- resamples(list("Linear Discriminant Analysis" =fit.lda_hfa,"Logistic Model"=fit.logistic_hfa, "Support Vector Machine " =fit.svm_hfa,"Random Forest" =fit.rf_hfa,LASSO=fit.lasso_hfa,Ridge=fit.ridge_hfa))
 summary(results)
 dotplot(results)
-
 ```
 
 ```{r}
@@ -975,21 +967,19 @@ confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
 
 predictions <- predict(fit.ridge_wfa, test.wfa_dummy)
 confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
-
 ```
 
 
-```{r getting variable importance of wfa models}
+```{r getting-variable-importance-of-wfa-models}
 varImp(fit.lda_wfa)
 varImp(fit.logistic_wfa)
 varImp(fit.svm_wfa)
 varImp(fit.rf_wfa)
 varImp(fit.lasso_wfa)
 varImp(fit.ridge_wfa)
-
 ```
 
-```{r fitting variable importance of wfa models} 
+```{r fitting-variable-importance-of-wfa-models} 
 varImp(fit.lda_wfa,scale=FALSE)
 varImp(fit.logistic_wfa,scale=FALSE)
 varImp(fit.svm_wfa,scale=FALSE)
@@ -1046,10 +1036,6 @@ plot(test_roc_ridge , add = TRUE, col='#330033', print.auc = TRUE, print.auc.y =
 abline(a=0, b=1, lty=2, lwd=3, col="black")
 legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","999999","330033"))
 ```
-
-
-```
-
 
 
 
