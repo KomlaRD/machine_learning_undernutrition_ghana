@@ -615,7 +615,7 @@ fit.lasso_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  
 set.seed(7)
 fit.ridge_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfh_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfh_dummy$Sample_wt,tuneGrid=expand.grid(alpha=0,lambda=lambda_vector))
 
-# Get the optimal tunning parameter for the ridge 
+# Get the optimal tuning parameter for the ridge 
 bestlambda_ridge<-fit.ridge_wfh$bestTune$lambda
 bestlambda_ridge
 
@@ -631,12 +631,15 @@ summary(results)
 dotplot(results)
 ```
 
-```{r}
+```{r summary-rf-model}
 # summarize Best Model
 print(fit.rf_wfh)
 ```
 
-```{r}
+
+### Confusion matrix
+
+```{r confusion-matrix-wasting}
 # estimate skill of all models  on the validation dataset
 predictions <- predict(fit.lda_wfh, test.wfh_dummy)
 confusionMatrix(predictions, test.wfh_dummy$wfh_dummy,positive="1")
@@ -659,8 +662,10 @@ confusionMatrix(predictions, test.wfh_dummy$wfh_dummy,positive="1")
 ```
 
 
+### Variable of importance
 
-```{r getting variable importance}
+
+```{r getting-variable-importance}
 varImp(fit.lda_wfh)
 varImp(fit.logistic_wfh)
 varImp(fit.svm_wfh)
@@ -687,11 +692,9 @@ plot(varImp(fit.lasso_wfh))
 plot(varImp(fit.ridge_wfh))
 ```
 
-```{r}
-#test.wfh_dummy$pred <- predict(fit.lda_wfh, test.wfh_dummy,probability=TRUE)
-#roc_curve = roc(test.wfh_dummy$wfh_dummy, predictor=factor(test.wfh_dummy$pred,ordered = TRUE))
-#plot(roc_curve, col="red", lwd=3)
-```
+
+
+### Wasting: ROC Curves
 
 ```{r producing individual ROC curves for all the models}
 test_prob_lda = predict(fit.lda_wfh, newdata = test.wfh_dummy, probability=TRUE)
@@ -714,25 +717,17 @@ test_roc_ridge= roc(test.wfh_dummy$wfh_dummy ~ factor(test_prob_ridge,ordered=TR
 ```
 
 
-```{r}
-
-```
-
-
-```{r}
-
-```
-
 ```{r combining all the ROC into one}
 plot(test_roc_lda,    print.auc = TRUE,  col='blue',percent=TRUE, print.auc.y = 34, print.auc.x = 0)
 plot(test_roc_logistic, add = TRUE, col='darkgoldenrod4', print.auc = TRUE, print.auc.y = 27, print.auc.x = 0)
 plot(test_roc_svm , add = TRUE, col='red', print.auc = TRUE, print.auc.y = 20, print.auc.x = 0)
 plot(test_roc_rf , add = TRUE, col='chartreuse', print.auc = TRUE, print.auc.y = 15, print.auc.x = 0)
-plot(test_roc_lasso , add = TRUE, col='#999999', print.auc = TRUE, print.auc.y = 10, print.auc.x = 0)
-plot(test_roc_ridge , add = TRUE, col='#330033', print.auc = TRUE, print.auc.y = 5, print.auc.x = 0)
+plot(test_roc_lasso , add = TRUE, col='yellow', print.auc = TRUE, print.auc.y = 10, print.auc.x = 0)
+plot(test_roc_ridge , add = TRUE, col='violet', print.auc = TRUE, print.auc.y = 5, print.auc.x = 0)
 abline(a=0, b=1, lty=2, lwd=3, col="black")
-legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","999999","330033"))
+legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","yellow","violet"))
 ```
+
 
 ```{r modelling for hfa}
 set.seed(7)
