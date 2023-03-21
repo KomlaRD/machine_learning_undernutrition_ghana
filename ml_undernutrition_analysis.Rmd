@@ -1,9 +1,11 @@
 ---
 title: Machine learning modelling of nutrition indicators in children under five years
-  in Ghana- R version
+  in Ghana
 output:
-  html_document: default
-  pdf_document: default
+  html_document:
+    toc: true
+    toc_float: true
+  css: "bootstrap.css"
 date: '2022-06-11'
 author: "Eric Komla Anku and Henry Ofori-Duah"
 ---
