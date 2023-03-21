@@ -15,7 +15,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r load-libraries}
 pacman::p_load(
         tidyverse, # Data wrangling and visualisation
-        skimr, # Skim dataset
         rio, # Import dataset
         here, # Directory management
         finalfit, # Model parameters and column labelling
