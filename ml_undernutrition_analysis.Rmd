@@ -880,10 +880,12 @@ legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Mode
 ```
 
 
+## ML: Underweight
 
-```{r model wfa on training data}
+
+```{r model-wfa-on-training-data}
 set.seed(7)
-# a) Linear Discriminant Analaysis
+# a) Linear Discriminant Analysis
 fit.lda_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfa_dummy, method="lda", metric=metric, trControl=control,weight=train.wfa_dummy$Sample_wt,tuneLength=15)
 
 # Support vector machine
@@ -927,7 +929,7 @@ fit.ridge_wfa <- train( wfa_dummy~residence + age  + birth_order + gender + bwt 
 
 ```
 
-```{r}
+```{r accuracy-underweight}
 # summarize accuracy of wfa models
 results <- resamples(list("Linear Discriminant Analysis" =fit.lda_wfa,"Logistic Model"=fit.logistic_wfa, "Support Vector Machine " =fit.svm_wfa,"Random Forest" =fit.rf_wfa,LASSO=fit.lasso_wfa,Ridge=fit.ridge_wfa))
 summary(results)
@@ -935,13 +937,15 @@ dotplot(results)
 
 ```
 
-```{r}
+```{r summarise-best-model}
 # summarize Best wfa Model
 print(fit.rf_wfa)
 ```
-```
 
-```{r}
+
+### Confusion matrix
+
+```{r underweight-confusion-matrix}
 # estimate skill of all wfa models  on the validation dataset
 predictions <- predict(fit.lda_wfa, test.wfa_dummy)
 confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
@@ -963,6 +967,9 @@ confusionMatrix(predictions, test.wfa_dummy$ wfa_dummy,positive="1")
 ```
 
 
+### Variable of importance
+
+
 ```{r getting-variable-importance-of-wfa-models}
 varImp(fit.lda_wfa)
 varImp(fit.logistic_wfa)
@@ -981,7 +988,7 @@ varImp(fit.lasso_wfa,scale=FALSE)
 varImp(fit.ridge_wfa,scale=FALSE)
 ```
 
-```{r ploting variable importance of wfa models}
+```{r ploting-variable-importance-of-wfa-models}
 plot(varImp(fit.lda_wfa))
 plot(varImp(fit.logistic_wfa))
 plot(varImp(fit.svm_wfa))
@@ -990,13 +997,10 @@ plot(varImp(fit.lasso_wfa))
 plot(varImp(fit.ridge_wfa))
 ```
 
-```{r}
-#test. wfa_dummy$pred <- predict(fit.lda_ wfa, test. wfa_dummy,probability=TRUE)
-#roc_curve = roc(test. wfa_dummy$ wfa_dummy, predictor=factor(test. wfa_dummy$pred,ordered = TRUE))
-#plot(roc_curve, col="red", lwd=3)
-```
 
-```{r producing individual ROC curves for all the wfa models}
+### ROC Curves
+
+```{r producing-individual-ROC-curves-for-all-the-wfa-models}
 test_prob_lda = predict(fit.lda_wfa, newdata = test.wfa_dummy, probability=TRUE)
 test_roc_lda = roc(test.wfa_dummy$ wfa_dummy ~ factor(test_prob_lda,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
 
@@ -1017,53 +1021,13 @@ test_roc_ridge= roc(test.wfa_dummy$wfa_dummy ~ factor(test_prob_ridge,ordered=TR
 ```
 
 
-
-
 ```{r combining all the wfa ROC into one}
 plot(test_roc_lda,    print.auc = TRUE,  col='blue',percent=TRUE, print.auc.y = 34, print.auc.x = 0)
 plot(test_roc_logistic, add = TRUE, col='darkgoldenrod4', print.auc = TRUE, print.auc.y = 27, print.auc.x = 0)
 plot(test_roc_svm , add = TRUE, col='red', print.auc = TRUE, print.auc.y = 20, print.auc.x = 0)
 plot(test_roc_rf , add = TRUE, col='chartreuse', print.auc = TRUE, print.auc.y = 15, print.auc.x = 0)
-plot(test_roc_lasso , add = TRUE, col='#999999', print.auc = TRUE, print.auc.y = 10, print.auc.x = 0)
-plot(test_roc_ridge , add = TRUE, col='#330033', print.auc = TRUE, print.auc.y = 5, print.auc.x = 0)
+plot(test_roc_lasso , add = TRUE, col='yellow', print.auc = TRUE, print.auc.y = 10, print.auc.x = 0)
+plot(test_roc_ridge , add = TRUE, col='violet', print.auc = TRUE, print.auc.y = 5, print.auc.x = 0)
 abline(a=0, b=1, lty=2, lwd=3, col="black")
-legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","999999","330033"))
+legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","yellow","violet"))
 ```
-
-
-
-```{r statistical-visualisation}
-# Stats visualisations using ggstatsplot
-# Note observations under exploratory section
-```
-
-
-```{r scatterplot-matrix}
-# Create a scatterplot matrix using ggpairs from GGally
-# Note observations under exploratory section
-```
-
-## Introduction to actual analysis
-
-Provide detailed information about the dataset
-
-### Machine learning workflow
-
-1.  Access and load the data: Completed
-2.  Preprocess the data
-3.  Derive features using the preprocessed data
-4.  Train models using the features derived in step 3
-5.  Iterate to find the best model
-6.  Integrate the best-trained model into a production system
-
-## Explanatory data analysis
-
-
-
-## Baseline model
-
-
-## Iterate
-
-
-## Evaluate model
