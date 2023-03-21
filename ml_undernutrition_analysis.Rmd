@@ -33,13 +33,11 @@ pacman::p_load(
         randomForest,
         labelled,
         tableone
-        
-        
 )
 ```
 
 ```{r import-dataset}
-df <- import(here("data","GHKR72FL.SAV")) # Import dataset from the data folder
+df <- import(here("data","GHKR72FL.SAV")) # Import data set from the data folder
 ```
 
 
@@ -76,7 +74,7 @@ The improved water source included all forms of Pipe Water, Borehole, Protected 
 
 
 ```{r column-selection}
-# Use select() function from tidyverse to select columns of interest //TODO: Child's height inclusion, z-score flags
+# Use select() function from tidyverse to select columns of interest 
 child <- df%>%
         select(HW72, #WFH z-scores
                HW70, # HFA z-scores
@@ -179,14 +177,6 @@ ff_glimpse(child_final)
 - Had diarrheoa (H11) has 291 missing values representing 4.9% of observations. 
 - Child's weight in kg has 3102 missing observations representing 52.7% of observations.
 - After droping misssing cases, number ended up as `r dim_new_df[1]` 
-
-
-
-```{r skim-dataset}
-# Use skim() from skimr
-# Note assessment of data
-```
-
 
 
 ## Cleaning or recoding
