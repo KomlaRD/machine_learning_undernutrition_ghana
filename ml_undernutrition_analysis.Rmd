@@ -35,6 +35,12 @@ pacman::p_load(
 )
 ```
 
+***
+
+
+# Data wrangling
+
+
 ```{r import-dataset}
 df <- import(here("data","GHKR72FL.SAV")) # Import data set from the data folder
 ```
@@ -408,8 +414,8 @@ var_label(child_final)=list(
 ff_glimpse(child_final)
 ```
 
-<<<<<<< HEAD
-```{r}
+
+```{r class-of-variables}
 # list types for each attribute
 sapply(child_final,class)
 ```
@@ -428,15 +434,14 @@ cbind(freq=table(child_final$hfa_dummy), percentage_hfa=percentage)
 #summarize the class distribution for wfa
 percentage<- prop.table(table(child_final$wfa_dummy)) * 100  
 cbind(freq=table(child_final$hfa_dummy), percentage_wfa=percentage)
-
 ```
-||||||| e7cbe50
-=======
+
+
 ```{r export-clean-dataset}
 export(child_final, here("data","clean_data.csv")) #Export clean dataset
 ```
 
->>>>>>> 12d47bf4eb370bb5076e99fa8d800ccca6cd8049
+
 
 ## Exploratory data analysis
 
