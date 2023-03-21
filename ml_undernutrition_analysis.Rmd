@@ -391,29 +391,15 @@ child_final<- child_final%>%
 
 
 ```{r assigning-variable-label-with-dplyr}
-# 
 var_label(child_final)=list(
-      wfh_dummy="Wasting",
-      hfa_dummy="Stunting",
-      wfa_dummy="Underweight",
-      wfh_cat="Wasting",
-      hfa_cat="Stunting",
-      wfa_cat="Underweight",
-      residence="Place of Residence",
       age="Age of child",
       birth_order="Birth Order of child",
-      gender="Gender of Child",
       bwt ="Birth Weight",
       num_child="Number of children Underfive",
-      educ_mum="Mothers level of Education",
-      wealth_index="Household wealth Index",
-      diarrhea="Child has diarroea",
       wt="Current weight of child",
-      region="Region of Residence",
-      source_water="Source of Water",
       Sample_wt="Sample Weight",
-               PSU="Primary Sampling Unit",
-               Strata="Strata"
+      PSU="Primary Sampling Unit",
+      Strata="Strata"
                 )
 ```
 
