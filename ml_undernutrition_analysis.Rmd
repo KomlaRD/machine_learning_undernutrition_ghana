@@ -728,10 +728,12 @@ abline(a=0, b=1, lty=2, lwd=3, col="black")
 legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","yellow","violet"))
 ```
 
+## ML: Stunting
 
-```{r modelling for hfa}
+
+```{r modelling-for-hfa}
 set.seed(7)
-# a) Linear Discriminant Analaysis
+# a) Linear Discriminant Analysis
 fit.lda_hfa <- train(hfa_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index  +diarrhea +wt+region +source_water, data=train.hfa_dummy, method="lda", metric=metric, trControl=control,weight=train.hfa_dummy$Sample_wt,tuneLength=15)
 
 # Support vector machine
@@ -780,12 +782,16 @@ summary(results)
 dotplot(results)
 ```
 
-```{r}
+```{r stunting-best-model}
 # summarize Best Model
 print(fit.rf_hfa)
 ```
 
-```{r}
+
+### Confusion matrix
+
+
+```{r stunting-confusion-matrix}
 # estimate skill of all hfa models  on the validation dataset 
 predictions <- predict(fit.lda_hfa, test.hfa_dummy)
 confusionMatrix(predictions, test.hfa_dummy$hfa_dummy,positive="1")
@@ -804,10 +810,13 @@ confusionMatrix(predictions, test.hfa_dummy$hfa_dummy,positive="1")
 
 predictions <- predict(fit.ridge_hfa, test.hfa_dummy)
 confusionMatrix(predictions, test.hfa_dummy$hfa_dummy,positive="1")
-
 ```
 
-```{r getting variable importance of hfa models}
+
+### Variable of importance
+
+
+```{r getting-variable-importance-of-hfa-models}
 varImp(fit.lda_hfa)
 varImp(fit.logistic_hfa)
 varImp(fit.svm_hfa)
@@ -817,8 +826,7 @@ varImp(fit.ridge_hfa)
 
 ```
 
-```{r fitting variable importance hfa}
-
+```{r fitting-variable-importance-hfa}
 varImp(fit.lda_hfa,scale=FALSE)
 varImp(fit.logistic_hfa,scale=FALSE)
 varImp(fit.svm_hfa,scale=FALSE)
@@ -827,7 +835,7 @@ varImp(fit.lasso_hfa,scale=FALSE)
 varImp(fit.ridge_hfa,scale=FALSE)
 ```
 
-```{r ploting variable importance hfa}
+```{r ploting-variable-importance-hfa}
 plot(varImp(fit.lda_hfa))
 plot(varImp(fit.logistic_hfa))
 plot(varImp(fit.svm_hfa))
@@ -836,7 +844,10 @@ plot(varImp(fit.lasso_hfa))
 plot(varImp(fit.ridge_hfa))
 ```
 
-```{r producing individual ROC curves for all the hfa models}
+
+### ROC Curves
+
+```{r individual-ROC-curves-for-all-hfa-models}
 test_prob_lda= predict(fit.lda_hfa, newdata = test.hfa_dummy, probability=TRUE)
 test_roc_lda = roc(test.hfa_dummy$hfa_dummy ~ factor(test_prob_lda,ordered=TRUE), plot = TRUE, print.auc = TRUE,percent=TRUE,ordered=TRUE)
 
@@ -862,11 +873,13 @@ plot(test_roc_lda,    print.auc = TRUE,  col='blue',percent=TRUE, print.auc.y = 
 plot(test_roc_logistic, add = TRUE, col='darkgoldenrod4', print.auc = TRUE, print.auc.y = 27, print.auc.x = 0)
 plot(test_roc_svm , add = TRUE, col='red', print.auc = TRUE, print.auc.y = 20, print.auc.x = 0)
 plot(test_roc_rf , add = TRUE, col='chartreuse', print.auc = TRUE, print.auc.y = 15, print.auc.x = 0)
-plot(test_roc_lasso , add = TRUE, col='#999999', print.auc = TRUE, print.auc.y = 10, print.auc.x = 0)
-plot(test_roc_ridge , add = TRUE, col='#330033', print.auc = TRUE, print.auc.y = 5, print.auc.x = 0)
+plot(test_roc_lasso , add = TRUE, col='yellow', print.auc = TRUE, print.auc.y = 10, print.auc.x = 0)
+plot(test_roc_ridge , add = TRUE, col='violet', print.auc = TRUE, print.auc.y = 5, print.auc.x = 0)
 abline(a=0, b=1, lty=2, lwd=3, col="black")
-legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","999999","330033"))
+legend("topleft", legend = c("Linear Discriminant Analysis (LDA)","Logistic Model","Support Vector Machine Model","Random Forest Model","LASSO Model","Ridge Model") , pch = 15, bty = 'n', col = c("blue","darkgoldenrod4", "red","chartreuse","yellow","violet"))
 ```
+
+
 
 ```{r model wfa on training data}
 set.seed(7)
