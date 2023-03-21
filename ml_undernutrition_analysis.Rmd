@@ -370,19 +370,22 @@ child_final<- child_final%>%
                         
                                 "1" = "Wasting",
                                  "0" = "Normal"
-                        ),
+                        )%>%
+                  ff_label("Wasting"),
                 
                 hfa_dummy = hfa_cat%>%
                         fct_recode(
                                 "0" = "Normal",
                                 "1" = "Stunting"
-                        ),
+                        )%>%
+                  ff_label("Stunting"),
                 
                 wfa_dummy = wfa_cat%>%
                         fct_recode(
                                 "0" = "Normal",
                                 "1" = "Underweight"
-                        )
+                        )%>%
+                  ff_label("Underweight")
         )
 ```
 
