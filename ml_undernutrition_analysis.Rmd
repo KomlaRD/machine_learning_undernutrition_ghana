@@ -547,7 +547,7 @@ add_p()
 tab4wfa
 ```
 
-```{r  creating training and testing data set for the three outcomes }
+```{r  creating-training-and-testing-data-set-for-the-three-outcomes }
 set.seed(7)
 
 intrain.wfh_dummy<-createDataPartition(y=child_final$wfh_dummy, p=.60, list=F)
@@ -565,24 +565,26 @@ train.wfa_dummy<- child_final[intrain.wfa_dummy,]
 test.wfa_dummy<- child_final[-intrain.wfa_dummy,]
 ```
 
-```{r run algorithims using 5 fold cross validation}
+```{r run-algorithims-using-5-fold-cross-validation}
 control<-trainControl(method="cv",number=5)
 metric<-"Accuracy"
 ```
 
 
-```{r}
+```{r lambda-vector}
 #Create a vector for potential lambda values for both the ridge and lasso models
 lambda_vector<-seq(0,1,by=0.01)
 ```
 
 
+***
 
 
+## ML: Wasting
 
-```{r}
+```{r train-wasting}
 set.seed(7)
-# a) Linear Discriminant Analaysis
+# a) Linear Discriminant Analysis
 fit.lda_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index  +diarrhea +wt+region +source_water, data=train.wfh_dummy, method="lda", metric=metric, trControl=control,weight=train.wfh_dummy$Sample_wt,tuneLength=15)
 
 # Support vector machine
@@ -622,7 +624,7 @@ set.seed(7)
 fit.ridge_wfh <- train(wfh_dummy~residence + age  + birth_order + gender + bwt  +num_child  +educ_mum +wealth_index+diarrhea +wt+region +source_water, data=train.wfh_dummy, method="glmnet", metric=metric, trControl=control,weights=train.wfh_dummy$Sample_wt,tuneGrid=expand.grid(alpha=0,lambda=bestlambda_ridge))
 ```
 
-```{r}
+```{r fit-wasting}
 # summarize accuracy of models
 results <- resamples(list("Linear Discriminant Analysis" =fit.lda_wfh,"Logistic Model"=fit.logistic_wfh, "Support Vector Machine " =fit.svm_wfh,"Random Forest" =fit.rf_wfh,LASSO=fit.lasso_wfh,Ridge=fit.ridge_wfh))
 summary(results)
